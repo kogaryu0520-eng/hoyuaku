@@ -290,6 +290,9 @@
     let desiredRunning = false;
     let lastFinalText = "";
     let lastTranslateAt = 0;
+    let lastRequestId = 0;
+    const TRANSLATION_CACHE = new Map();
+    let interimUpdateAt = 0;
 
     const langNames = {
       "vi": "ベトナム語",
@@ -1004,16 +1007,33 @@
       "幅": "幅"
 };
 
+    // 辞書補正の高速化：678語を毎回ループせず、正規表現1回で置換
+    let STEEL_TERM_REGEX = null;
+
+    function escapeRegExp(text) {
+      return String(text).replace(/[.*+?^${}()|[\]\]/g, "\$&");
+    }
+
+    function buildSteelTermRegex() {
+      if (STEEL_TERM_REGEX) return STEEL_TERM_REGEX;
+
+      const keys = Object.keys(STEEL_TERM_DICTIONARY)
+        .sort((a, b) => b.length - a.length)
+        .map(escapeRegExp);
+
+      STEEL_TERM_REGEX = new RegExp(keys.join("|"), "g");
+      return STEEL_TERM_REGEX;
+    }
+
     function correctJapaneseText(text) {
       text = String(text || "");
+      if (!text) return "";
 
-      for (const wrong in STEEL_TERM_DICTIONARY) {
-        if (Object.prototype.hasOwnProperty.call(STEEL_TERM_DICTIONARY, wrong)) {
-          text = text.split(wrong).join(STEEL_TERM_DICTIONARY[wrong]);
-        }
-      }
+      const regex = buildSteelTermRegex();
 
-      return text;
+      return text.replace(regex, function(match) {
+        return STEEL_TERM_DICTIONARY[match] || match;
+      });
     }
 
 
@@ -1164,9 +1184,12 @@
         }
 
         if (interimText) {
-          sourceText.textContent = correctJapaneseText(interimText);
-          translatedText.textContent = "翻訳中...";
-          fitDisplayText();
+          const nowInterim = Date.now();
+          if (nowInterim - interimUpdateAt > 180) {
+            interimUpdateAt = nowInterim;
+            sourceText.textContent = correctJapaneseText(interimText);
+            fitDisplayText();
+          }
         }
 
         if (finalText) {
@@ -1179,7 +1202,7 @@
           fitDisplayText();
 
           const now = Date.now();
-          if (now - lastTranslateAt > 500) {
+          if (now - lastTranslateAt > 120) {
             lastTranslateAt = now;
             translateText(finalText);
           }
@@ -1224,12 +1247,21 @@
         return;
       }
 
+      const cacheKey = targetLang + "::" + text;
+      if (TRANSLATION_CACHE.has(cacheKey)) {
+        translatedText.textContent = TRANSLATION_CACHE.get(cacheKey);
+        fitDisplayText();
+        setStatus("キャッシュ表示");
+        return;
+      }
+
       translatedText.textContent = "翻訳中...";
       fitDisplayText();
       setStatus("翻訳中");
 
       const protectedData = applyTermPlaceholders(text);
       const textForTranslate = protectedData.text;
+      const requestId = ++lastRequestId;
 
       const callbackName = "callback_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
 
@@ -1241,8 +1273,15 @@
             return;
           }
 
+          if (requestId !== lastRequestId) {
+            return;
+          }
+
           const restored = restoreTermPlaceholders(data.translated || "", protectedData.replacements);
-          translatedText.textContent = restored || "翻訳結果なし";
+          const finalTranslated = restored || "翻訳結果なし";
+          TRANSLATION_CACHE.set(cacheKey, finalTranslated);
+
+          translatedText.textContent = finalTranslated;
           fitDisplayText();
           setStatus("翻訳完了");
 
@@ -1271,6 +1310,18 @@
         "&target=" + encodeURIComponent(targetLang) +
         "&callback=" + callbackName +
         "&t=" + Date.now();
+
+      const timeoutId = setTimeout(function() {
+        if (requestId === lastRequestId) {
+          setStatus("翻訳が遅れています。次の発話を待機中");
+        }
+      }, 2500);
+
+      const originalCallback = window[callbackName];
+      window[callbackName] = function(data) {
+        clearTimeout(timeoutId);
+        originalCallback(data);
+      };
 
       document.body.appendChild(script);
     }
