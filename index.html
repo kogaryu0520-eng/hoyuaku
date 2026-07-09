@@ -2,240 +2,522 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>多言語翻訳モニター</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>多言語 音声翻訳表示</title>
   <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #151b23;
+      --panel2: #1f2937;
+      --text: #ffffff;
+      --muted: #9ca3af;
+      --accent: #22c55e;
+      --danger: #ef4444;
+      --blue: #2563eb;
+      --border: #374151;
+      --translated-font: 56px;
+      --source-font: 40px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      color: #222;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overscroll-behavior: none;
     }
 
-    #translatedBox {
-      position: sticky;
-      top: 0;
-      z-index: 999;
-      background: #111;
-      color: #fff;
-      padding: 28px 20px;
-      font-size: 44px;
-      font-weight: bold;
-      line-height: 1.4;
-      min-height: 120px;
-      box-sizing: border-box;
-    }
-
-    .tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 12px;
-      background: #222;
-    }
-
-    .tabs button {
-      flex: 1;
-      min-width: 120px;
-      padding: 14px 10px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background: #555;
-      color: #fff;
-    }
-
-    .tabs button.active {
-      background: #007aff;
-      font-weight: bold;
-    }
-
-    .controls {
-      padding: 16px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .controls button {
-      flex: 1;
-      min-width: 140px;
-      padding: 16px;
+    header {
+      background: #05070a;
+      color: white;
+      padding: 10px 14px;
+      text-align: center;
       font-size: 18px;
-      border: none;
-      border-radius: 10px;
-      color: #fff;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
     }
 
-    #startBtn {
-      background: #008000;
+    .meetingDisplay {
+      background: #05070a;
+      border-bottom: 6px solid #222;
     }
 
-    #stopBtn {
-      background: #cc0000;
+    .meetingGrid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
     }
 
-    textarea {
-      width: calc(100% - 32px);
-      margin: 16px;
-      height: 140px;
-      font-size: 22px;
-      padding: 12px;
-      box-sizing: border-box;
-      border-radius: 8px;
-      border: 1px solid #ccc;
+    .displayPanel {
+      min-height: 150px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: stretch;
+      text-align: center;
+      word-break: break-word;
     }
 
-    #sourceText {
-      margin: 16px;
-      padding: 12px;
-      background: #fff;
-      border-radius: 8px;
-      font-size: 20px;
-      min-height: 60px;
+    .displayPanel.source {
+      border-bottom: 1px solid #2d3748;
     }
 
     .label {
-      margin: 16px 16px 0;
-      font-weight: bold;
-      color: #555;
+      color: #9ca3af;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
     }
 
-    #status {
-      margin: 0 16px 16px;
-      color: #666;
+    #sourceText {
+      font-size: var(--source-font);
+      font-weight: 750;
+      line-height: 1.32;
+      color: #e5e7eb;
+    }
+
+    #translatedText {
+      font-size: var(--translated-font);
+      font-weight: 850;
+      line-height: 1.25;
+      color: white;
+    }
+
+    .meetingDisplay.listening {
+      border-bottom-color: var(--danger);
+      box-shadow: 0 0 28px rgba(239, 68, 68, 0.45);
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tabs button,
+    .controls button,
+    .fontControls button,
+    .manualButton,
+    .clearButton {
+      border: none;
+      border-radius: 12px;
+      font-weight: 800;
+      color: white;
+      cursor: pointer;
+    }
+
+    .tabs button {
+      font-size: 15px;
+      padding: 13px 6px;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+    }
+
+    .tabs button.active {
+      background: white;
+      color: #111827;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      padding: 10px;
+      background: var(--panel);
+    }
+
+    .controls button {
+      font-size: 18px;
+      padding: 16px 6px;
+    }
+
+    .start {
+      background: var(--accent);
+    }
+
+    .start.recording {
+      background: var(--danger);
+      animation: pulse 1s infinite;
+    }
+
+    .stop {
+      background: var(--danger);
+    }
+
+    .fullscreen {
+      background: #111827;
+      border: 1px solid #4b5563 !important;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 rgba(239,68,68,0.6); }
+      50% { transform: scale(1.02); box-shadow: 0 0 24px rgba(239,68,68,0.6); }
+      100% { transform: scale(1); box-shadow: 0 0 0 rgba(239,68,68,0.6); }
+    }
+
+    .fontControls {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 0 10px 10px;
+      background: var(--panel);
+    }
+
+    .fontControls button {
+      background: #374151;
+      padding: 12px 6px;
+      font-size: 15px;
+    }
+
+    .area {
+      padding: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 105px;
+      font-size: 21px;
+      line-height: 1.45;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #111827;
+      color: white;
+      resize: vertical;
+      outline: none;
+    }
+
+    .manualButton,
+    .clearButton {
+      width: calc(100% - 20px);
+      margin: 0 10px 10px;
+      font-size: 19px;
+      padding: 15px;
+    }
+
+    .manualButton {
+      background: var(--blue);
+    }
+
+    .clearButton {
+      background: #4b5563;
+    }
+
+    .status {
+      padding: 8px 14px 12px;
+      font-size: 14px;
+      color: var(--muted);
+      min-height: 34px;
+    }
+
+    .history {
+      padding: 10px;
+      max-height: 44vh;
+      overflow-y: auto;
+    }
+
+    .historyItem {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
       font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 10px 0;
+    }
+
+    body.meetingMode {
+      background: #000;
+      overflow: hidden;
+    }
+
+    .meetingMode header,
+    .meetingMode .tabs,
+    .meetingMode .controls,
+    .meetingMode .fontControls,
+    .meetingMode .area,
+    .meetingMode .manualButton,
+    .meetingMode .clearButton,
+    .meetingMode .status,
+    .meetingMode .history {
+      display: none !important;
+    }
+
+    .meetingMode .meetingDisplay {
+      height: 100vh;
+      border-bottom: none;
+      background: #000;
+    }
+
+    .meetingMode .meetingGrid {
+      height: 100vh;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .meetingMode .displayPanel {
+      min-height: 100vh;
+      padding: 44px;
+    }
+
+    .meetingMode .displayPanel.source {
+      border-bottom: none;
+      border-right: 2px solid #333;
+    }
+
+    .meetingMode .label {
+      font-size: 28px;
+      margin-bottom: 30px;
+    }
+
+    .meetingMode #sourceText {
+      font-size: 58px;
+    }
+
+    .meetingMode #translatedText {
+      font-size: 68px;
+    }
+
+    @media screen and (min-width: 900px) {
+      .tabs {
+        grid-template-columns: repeat(6, 1fr);
+      }
+
+      .meetingGrid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .displayPanel.source {
+        border-bottom: none;
+        border-right: 1px solid #2d3748;
+      }
+
+      .displayPanel {
+        min-height: 230px;
+      }
+
+      .controls button {
+        font-size: 21px;
+      }
+    }
+
+    @media screen and (orientation: portrait) {
+      .meetingMode .meetingGrid {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr;
+      }
+
+      .meetingMode .displayPanel {
+        min-height: 50vh;
+      }
+
+      .meetingMode .displayPanel.source {
+        border-right: none;
+        border-bottom: 2px solid #333;
+      }
+
+      .meetingMode #sourceText {
+        font-size: 44px;
+      }
+
+      .meetingMode #translatedText {
+        font-size: 54px;
+      }
     }
   </style>
 </head>
 
 <body>
+  <header>多言語 音声翻訳表示</header>
 
-  <div id="translatedBox">
-    翻訳結果がここに表示されます
-  </div>
+  <section id="meetingDisplay" class="meetingDisplay">
+    <div class="meetingGrid">
+      <div class="displayPanel source">
+        <div class="label">日本語</div>
+        <div id="sourceText">日本語がここに表示されます</div>
+      </div>
+
+      <div class="displayPanel translated">
+        <div class="label" id="targetLabel">ベトナム語</div>
+        <div id="translatedText">翻訳結果がここに表示されます</div>
+      </div>
+    </div>
+  </section>
 
   <div class="tabs">
-    <button class="active" onclick="setLang('vi', this)">ベトナム語</button>
-    <button onclick="setLang('en', this)">英語</button>
-    <button onclick="setLang('es', this)">スペイン語</button>
-    <button onclick="setLang('pt', this)">ポルトガル語</button>
-    <button onclick="setLang('zh-CN', this)">中国語</button>
-    <button onclick="setLang('id', this)">インドネシア語</button>
+    <button class="langBtn active" data-lang="vi">ベトナム語</button>
+    <button class="langBtn" data-lang="en">英語</button>
+    <button class="langBtn" data-lang="es">スペイン語</button>
+    <button class="langBtn" data-lang="pt">ポルトガル語</button>
+    <button class="langBtn" data-lang="zh-CN">中国語</button>
+    <button class="langBtn" data-lang="id">インドネシア語</button>
   </div>
 
   <div class="controls">
-    <button id="startBtn" onclick="startMic()">マイク開始</button>
-    <button id="stopBtn" onclick="stopMic()">マイク停止</button>
+    <button id="startBtn" class="start" onclick="startMic()">🎙 開始</button>
+    <button class="stop" onclick="stopMic()">停止</button>
+    <button class="fullscreen" onclick="enterMeetingFullscreen()">⛶ 全画面</button>
   </div>
 
-  <div id="status">待機中</div>
-
-  <div class="label">音声認識された日本語</div>
-  <div id="sourceText"></div>
-
-  <div class="label">手入力でも翻訳できます</div>
-  <textarea id="inputText" placeholder="ここに日本語を入力"></textarea>
-
-  <div class="controls">
-    <button style="background:#007aff;" onclick="translateManual()">翻訳する</button>
+  <div class="fontControls">
+    <button onclick="setFontSize('medium')">文字 中</button>
+    <button onclick="setFontSize('large')">文字 大</button>
+    <button onclick="setFontSize('xlarge')">特大</button>
+    <button onclick="toggleMeetingMode()">表示のみ</button>
   </div>
+
+  <div class="area">
+    <textarea id="inputText" placeholder="ここに日本語を入力、または音声入力されます"></textarea>
+  </div>
+
+  <button class="manualButton" onclick="manualTranslate()">翻訳する</button>
+  <button class="clearButton" onclick="clearScreen()">画面をクリア</button>
+
+  <div class="status" id="status">待機中：翻訳先は ベトナム語</div>
+  <div class="history" id="history"></div>
 
   <script>
-    const GAS_URL = "ここにGASのウェブアプリURLを貼ってください";
+    /*
+      ここだけ変更してください。
+      例：
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbxxxxxxx/exec";
+    */
+    const GAS_URL = "ここにGASのWebアプリURLを入れてください";
 
     let targetLang = "vi";
     let recognition = null;
     let recognizing = false;
+    let lastFinalText = "";
+    let lastTranslateAt = 0;
 
-    function setLang(lang, btn) {
-      targetLang = lang;
+    const langNames = {
+      "vi": "ベトナム語",
+      "en": "英語",
+      "es": "スペイン語",
+      "pt": "ポルトガル語",
+      "zh-CN": "中国語",
+      "id": "インドネシア語"
+    };
 
-      document.querySelectorAll(".tabs button").forEach(function(button) {
-        button.classList.remove("active");
+    const meetingDisplay = document.getElementById("meetingDisplay");
+    const sourceText = document.getElementById("sourceText");
+    const translatedText = document.getElementById("translatedText");
+    const targetLabel = document.getElementById("targetLabel");
+    const inputText = document.getElementById("inputText");
+    const statusBox = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+
+    document.querySelectorAll(".langBtn").forEach(button => {
+      button.addEventListener("click", () => {
+        targetLang = button.dataset.lang;
+
+        document.querySelectorAll(".langBtn").forEach(btn => {
+          btn.classList.remove("active");
+        });
+
+        button.classList.add("active");
+        targetLabel.textContent = langNames[targetLang];
+        setStatus("翻訳先：" + langNames[targetLang]);
+
+        const currentText = inputText.value.trim();
+        if (currentText) translateText(currentText);
       });
-
-      btn.classList.add("active");
-    }
-
-    function translateManual() {
-      const text = document.getElementById("inputText").value.trim();
-      if (!text) return;
-
-      document.getElementById("sourceText").textContent = text;
-      translateText(text);
-    }
-
-    function translateText(text) {
-      document.getElementById("status").textContent = "翻訳中...";
-
-      const callbackName = "callback_" + Date.now();
-
-      window[callbackName] = function(data) {
-        if (data.error) {
-          document.getElementById("translatedBox").textContent = "エラー：" + data.error;
-        } else {
-          document.getElementById("translatedBox").textContent = data.translated;
-        }
-
-        document.getElementById("status").textContent = "翻訳完了";
-
-        delete window[callbackName];
-        script.remove();
-      };
-
-      const script = document.createElement("script");
-      script.src =
-        GAS_URL +
-        "?text=" + encodeURIComponent(text) +
-        "&target=" + encodeURIComponent(targetLang) +
-        "&callback=" + callbackName;
-
-      document.body.appendChild(script);
-    }
+    });
 
     function setupSpeechRecognition() {
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        alert("このブラウザは音声入力に対応していません。iPadのSafariで試してください。");
+        setStatus("このブラウザは音声入力に対応していません。iPadのSafari、またはChromeで試してください。");
         return null;
       }
 
-      const recog = new SpeechRecognition();
+      const rec = new SpeechRecognition();
+      rec.lang = "ja-JP";
+      rec.continuous = true;
+      rec.interimResults = true;
 
-      recog.lang = "ja-JP";
-      recog.continuous = true;
-      recog.interimResults = false;
-
-      recog.onstart = function() {
+      rec.onstart = function() {
         recognizing = true;
-        document.getElementById("status").textContent = "マイク入力中...";
+        meetingDisplay.classList.add("listening");
+        startBtn.classList.add("recording");
+        startBtn.textContent = "🎙 入力中";
+        setStatus("音声入力中：" + langNames[targetLang] + "へ翻訳します");
       };
 
-      recog.onresult = function(event) {
-        const result = event.results[event.results.length - 1];
-        const text = result[0].transcript;
-
-        document.getElementById("sourceText").textContent = text;
-        document.getElementById("inputText").value = text;
-
-        translateText(text);
-      };
-
-      recog.onerror = function(event) {
-        document.getElementById("status").textContent =
-          "音声認識エラー：" + event.error;
-      };
-
-      recog.onend = function() {
+      rec.onend = function() {
         recognizing = false;
-        document.getElementById("status").textContent = "マイク停止中";
+        meetingDisplay.classList.remove("listening");
+        startBtn.classList.remove("recording");
+        startBtn.textContent = "🎙 開始";
+        setStatus("音声入力停止");
       };
 
-      return recog;
+      rec.onerror = function(event) {
+        setStatus("音声入力エラー：" + event.error);
+      };
+
+      rec.onresult = function(event) {
+        let interimText = "";
+        let finalText = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+
+          if (event.results[i].isFinal) {
+            finalText += transcript;
+          } else {
+            interimText += transcript;
+          }
+        }
+
+        if (interimText) {
+          inputText.value = interimText;
+          sourceText.textContent = interimText;
+          translatedText.textContent = "翻訳中...";
+        }
+
+        if (finalText) {
+          finalText = finalText.trim();
+
+          if (!finalText || finalText === lastFinalText) return;
+
+          lastFinalText = finalText;
+          inputText.value = finalText;
+          sourceText.textContent = finalText;
+
+          const now = Date.now();
+
+          if (now - lastTranslateAt > 500) {
+            lastTranslateAt = now;
+            translateText(finalText);
+          }
+        }
+      };
+
+      return rec;
     }
 
     function startMic() {
@@ -243,8 +525,12 @@
         recognition = setupSpeechRecognition();
       }
 
-      if (recognition && !recognizing) {
-        recognition.start();
+      if (!recognition) return;
+
+      try {
+        if (!recognizing) recognition.start();
+      } catch (err) {
+        setStatus("音声開始エラー：" + err.message);
       }
     }
 
@@ -253,7 +539,173 @@
         recognition.stop();
       }
     }
-  </script>
 
+    function manualTranslate() {
+      const text = inputText.value.trim();
+
+      if (!text) {
+        setStatus("翻訳する文章を入力してください");
+        return;
+      }
+
+      sourceText.textContent = text;
+      translateText(text);
+    }
+
+    function translateText(text) {
+      if (!GAS_URL || GAS_URL.includes("ここにGAS")) {
+        setStatus("GAS_URLを設定してください");
+        translatedText.textContent = "GAS_URLを設定してください";
+        return;
+      }
+
+      setStatus("翻訳中...");
+      translatedText.textContent = "翻訳中...";
+
+      const callbackName = "callback_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+
+      window[callbackName] = function(data) {
+        try {
+          if (data.error) {
+            setStatus("翻訳エラー：" + data.error);
+            translatedText.textContent = "翻訳エラー";
+            return;
+          }
+
+          const translated = data.translated || "";
+          translatedText.textContent = translated || "翻訳結果なし";
+          addHistory(text, translated);
+          setStatus(langNames[targetLang] + "へ翻訳完了");
+
+        } finally {
+          delete window[callbackName];
+          if (script && script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        }
+      };
+
+      const script = document.createElement("script");
+
+      script.onerror = function() {
+        setStatus("通信エラー：GASのURLまたは公開設定を確認してください");
+        translatedText.textContent = "通信エラー";
+        delete window[callbackName];
+        if (script && script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+      };
+
+      script.src =
+        GAS_URL +
+        "?text=" + encodeURIComponent(text) +
+        "&target=" + encodeURIComponent(targetLang) +
+        "&callback=" + callbackName +
+        "&t=" + Date.now();
+
+      document.body.appendChild(script);
+    }
+
+    function addHistory(original, translated) {
+      const history = document.getElementById("history");
+      const item = document.createElement("div");
+      item.className = "historyItem";
+
+      const now = new Date();
+      const timeText =
+        String(now.getHours()).padStart(2, "0") + ":" +
+        String(now.getMinutes()).padStart(2, "0");
+
+      item.innerHTML =
+        '<div class="small">' + timeText + ' / 日本語</div>' +
+        escapeHtml(original) +
+        '<hr>' +
+        '<div class="small">' + langNames[targetLang] + '</div>' +
+        escapeHtml(translated);
+
+      history.prepend(item);
+      history.scrollTop = 0;
+    }
+
+    function clearScreen() {
+      sourceText.textContent = "日本語がここに表示されます";
+      translatedText.textContent = "翻訳結果がここに表示されます";
+      inputText.value = "";
+      lastFinalText = "";
+      setStatus("画面をクリアしました");
+    }
+
+    function setFontSize(size) {
+      if (size === "medium") {
+        document.documentElement.style.setProperty("--source-font", "32px");
+        document.documentElement.style.setProperty("--translated-font", "44px");
+      }
+
+      if (size === "large") {
+        document.documentElement.style.setProperty("--source-font", "40px");
+        document.documentElement.style.setProperty("--translated-font", "56px");
+      }
+
+      if (size === "xlarge") {
+        document.documentElement.style.setProperty("--source-font", "52px");
+        document.documentElement.style.setProperty("--translated-font", "72px");
+      }
+
+      setStatus("文字サイズを変更しました");
+    }
+
+    function enterMeetingFullscreen() {
+      document.body.classList.add("meetingMode");
+
+      const doc = document.documentElement;
+
+      if (!document.fullscreenElement) {
+        if (doc.requestFullscreen) {
+          doc.requestFullscreen().catch(err => {
+            setStatus("全画面表示できません：" + err.message);
+          });
+        } else if (doc.webkitRequestFullscreen) {
+          doc.webkitRequestFullscreen();
+        } else {
+          setStatus("この端末では全画面APIが使えません。iPadではホーム画面に追加すると見やすくなります。");
+        }
+      }
+    }
+
+    function toggleMeetingMode() {
+      document.body.classList.toggle("meetingMode");
+    }
+
+    document.addEventListener("fullscreenchange", function() {
+      if (!document.fullscreenElement) {
+        document.body.classList.remove("meetingMode");
+      }
+    });
+
+    document.addEventListener("webkitfullscreenchange", function() {
+      if (!document.webkitFullscreenElement) {
+        document.body.classList.remove("meetingMode");
+      }
+    });
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") {
+        document.body.classList.remove("meetingMode");
+      }
+    });
+
+    function setStatus(message) {
+      statusBox.innerHTML = escapeHtml(message);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
 </body>
 </html>
