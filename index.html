@@ -144,6 +144,45 @@
       min-height: 20px;
     }
 
+
+    #exitFullscreenBtn {
+      display: none;
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 9999;
+      background: rgba(255,255,255,0.92);
+      color: #111827;
+      border: none;
+      border-radius: 999px;
+      font-weight: 900;
+      font-size: 20px;
+      padding: 16px 24px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    }
+
+    body.fullscreenMode #exitFullscreenBtn {
+      display: block;
+    }
+
+    #sourceText.compact {
+      font-size: clamp(22px, 4.2vw, 44px);
+    }
+
+    #sourceText.tiny {
+      font-size: clamp(18px, 3.2vw, 34px);
+      line-height: 1.22;
+    }
+
+    #translatedText.compact {
+      font-size: clamp(34px, 6.2vw, 72px);
+    }
+
+    #translatedText.tiny {
+      font-size: clamp(26px, 4.8vw, 54px);
+      line-height: 1.15;
+    }
+
     @keyframes pulse {
       0% { box-shadow: 0 0 0 rgba(239,68,68,0.5); }
       50% { box-shadow: 0 0 26px rgba(239,68,68,0.7); }
@@ -203,6 +242,7 @@
 </head>
 
 <body>
+  <button id="exitFullscreenBtn" onclick="exitFullscreenMode()">戻る</button>
   <div class="screen">
     <main class="display">
       <section class="box translatedBox">
@@ -247,6 +287,7 @@
     let targetLang = "vi";
     let recognition = null;
     let recognizing = false;
+    let desiredRunning = false;
     let lastFinalText = "";
     let lastTranslateAt = 0;
 
@@ -975,6 +1016,95 @@
       return text;
     }
 
+
+    const STEEL_TERM_TRANSLATIONS = {
+      "スプライスプレート": {"vi":"bản nối splice","en":"splice plate","es":"placa de empalme","pt":"placa de emenda","zh-CN":"拼接板","id":"pelat sambungan splice"},
+      "スプライス": {"vi":"bản nối splice","en":"splice plate","es":"placa de empalme","pt":"placa de emenda","zh-CN":"拼接板","id":"pelat sambungan splice"},
+      "ダイアフラム": {"vi":"tấm diaphragm","en":"diaphragm plate","es":"placa diafragma","pt":"placa diafragma","zh-CN":"隔板","id":"pelat diafragma"},
+      "梁": {"vi":"dầm thép","en":"steel beam","es":"viga de acero","pt":"viga de aço","zh-CN":"钢梁","id":"balok baja"},
+      "柱": {"vi":"cột thép","en":"steel column","es":"columna de acero","pt":"coluna de aço","zh-CN":"钢柱","id":"kolom baja"},
+      "大梁": {"vi":"dầm chính","en":"main beam","es":"viga principal","pt":"viga principal","zh-CN":"主梁","id":"balok utama"},
+      "小梁": {"vi":"dầm phụ","en":"secondary beam","es":"viga secundaria","pt":"viga secundária","zh-CN":"次梁","id":"balok sekunder"},
+      "開先加工": {"vi":"gia công mép vát hàn","en":"weld groove preparation","es":"preparación del bisel de soldadura","pt":"preparação do chanfro de soldagem","zh-CN":"焊接坡口加工","id":"persiapan alur las"},
+      "開先": {"vi":"mép vát hàn","en":"weld groove","es":"bisel de soldadura","pt":"chanfro de soldagem","zh-CN":"焊接坡口","id":"alur las"},
+      "完全溶込み": {"vi":"hàn ngấu hoàn toàn","en":"complete joint penetration weld","es":"soldadura de penetración completa","pt":"solda de penetração total","zh-CN":"全熔透焊","id":"las penetrasi penuh"},
+      "完全溶込": {"vi":"hàn ngấu hoàn toàn","en":"complete joint penetration weld","es":"soldadura de penetración completa","pt":"solda de penetração total","zh-CN":"全熔透焊","id":"las penetrasi penuh"},
+      "隅肉溶接": {"vi":"hàn góc","en":"fillet weld","es":"soldadura de filete","pt":"solda de filete","zh-CN":"角焊缝","id":"las fillet"},
+      "隅肉": {"vi":"hàn góc","en":"fillet weld","es":"soldadura de filete","pt":"solda de filete","zh-CN":"角焊","id":"las fillet"},
+      "仮付け": {"vi":"hàn đính tạm","en":"tack welding","es":"soldadura de puntos provisional","pt":"solda provisória","zh-CN":"点焊固定","id":"las titik sementara"},
+      "本溶接": {"vi":"hàn chính thức","en":"final welding","es":"soldadura final","pt":"soldagem final","zh-CN":"正式焊接","id":"pengelasan akhir"},
+      "裏当て": {"vi":"thanh lót mặt sau","en":"backing bar","es":"barra de respaldo","pt":"barra de apoio","zh-CN":"衬垫板","id":"batang backing"},
+      "エンドタブ": {"vi":"tấm tab đầu mối hàn","en":"weld end tab","es":"placa terminal de soldadura","pt":"aba final de soldagem","zh-CN":"引弧板","id":"tab ujung las"},
+      "ガセットプレート": {"vi":"bản mã gusset","en":"gusset plate","es":"placa gusset","pt":"chapa gusset","zh-CN":"节点板","id":"pelat gusset"},
+      "ガセット": {"vi":"bản mã gusset","en":"gusset plate","es":"placa gusset","pt":"chapa gusset","zh-CN":"节点板","id":"pelat gusset"},
+      "高力ボルト": {"vi":"bu lông cường độ cao","en":"high-strength bolt","es":"perno de alta resistencia","pt":"parafuso de alta resistência","zh-CN":"高强螺栓","id":"baut mutu tinggi"},
+      "H鋼": {"vi":"thép hình H","en":"H-beam","es":"viga H","pt":"viga H","zh-CN":"H型钢","id":"baja profil H"},
+      "BH": {"vi":"BH","en":"built-up H-beam","es":"viga H armada","pt":"viga H montada","zh-CN":"焊接H型钢","id":"balok H built-up"},
+      "コラム": {"vi":"ống thép hộp cột","en":"box column","es":"columna tubular cuadrada","pt":"coluna tubular quadrada","zh-CN":"箱形柱","id":"kolom kotak baja"},
+      "ショットブラスト": {"vi":"phun bi làm sạch","en":"shot blasting","es":"granallado","pt":"jateamento com granalha","zh-CN":"抛丸处理","id":"shot blasting"},
+      "ショット": {"vi":"phun bi","en":"shot blasting","es":"granallado","pt":"jateamento","zh-CN":"抛丸","id":"shot blasting"},
+      "UT": {"vi":"kiểm tra siêu âm UT","en":"UT ultrasonic testing","es":"ensayo ultrasónico UT","pt":"ensaio ultrassônico UT","zh-CN":"UT超声波探伤","id":"pengujian ultrasonik UT"},
+      "超音波探傷": {"vi":"kiểm tra siêu âm","en":"ultrasonic testing","es":"ensayo ultrasónico","pt":"ensaio ultrassônico","zh-CN":"超声波探伤","id":"pengujian ultrasonik"},
+      "MT": {"vi":"kiểm tra từ tính MT","en":"MT magnetic particle testing","es":"ensayo de partículas magnéticas MT","pt":"ensaio por partículas magnéticas MT","zh-CN":"MT磁粉探伤","id":"pengujian partikel magnetik MT"},
+      "PT": {"vi":"kiểm tra thẩm thấu PT","en":"PT penetrant testing","es":"ensayo por líquidos penetrantes PT","pt":"ensaio por líquido penetrante PT","zh-CN":"PT渗透探伤","id":"pengujian penetran PT"},
+      "建方": {"vi":"lắp dựng kết cấu thép","en":"steel erection","es":"montaje de estructura de acero","pt":"montagem da estrutura de aço","zh-CN":"钢结构安装","id":"ereksi struktur baja"},
+      "玉掛け": {"vi":"móc cáp cẩu","en":"slinging work","es":"trabajo de eslingado","pt":"trabalho de lingamento","zh-CN":"吊装挂钩作业","id":"pekerjaan rigging"},
+      "吊荷": {"vi":"tải đang treo","en":"suspended load","es":"carga suspendida","pt":"carga suspensa","zh-CN":"吊载","id":"beban tergantung"},
+      "介錯ロープ": {"vi":"dây điều hướng tải","en":"tag line","es":"cuerda guía","pt":"corda guia","zh-CN":"牵引绳","id":"tali pengarah"},
+      "フルハーネス": {"vi":"dây đai an toàn toàn thân","en":"full-body harness","es":"arnés de cuerpo completo","pt":"cinturão tipo paraquedista","zh-CN":"全身式安全带","id":"full body harness"},
+      "出来高": {"vi":"khối lượng hoàn thành","en":"work progress quantity","es":"cantidad de avance","pt":"quantidade produzida","zh-CN":"完成工程量","id":"jumlah hasil pekerjaan"}
+    };
+
+    function applyTermPlaceholders(text) {
+      const replacements = [];
+      let protectedText = String(text || "");
+      const terms = Object.keys(STEEL_TERM_TRANSLATIONS).sort((a, b) => b.length - a.length);
+
+      terms.forEach((term, index) => {
+        if (protectedText.includes(term)) {
+          const placeholder = " KOGA_TERM_" + index + " ";
+          protectedText = protectedText.split(term).join(placeholder);
+          replacements.push({ placeholder: placeholder.trim(), term: term });
+        }
+      });
+
+      return { text: protectedText, replacements: replacements };
+    }
+
+    function restoreTermPlaceholders(translated, replacements) {
+      let result = String(translated || "");
+
+      replacements.forEach(item => {
+        const target = STEEL_TERM_TRANSLATIONS[item.term]?.[targetLang] || item.term;
+        const patterns = [
+          item.placeholder,
+          item.placeholder.toLowerCase(),
+          item.placeholder.replaceAll("_", " "),
+          item.placeholder.toLowerCase().replaceAll("_", " ")
+        ];
+
+        patterns.forEach(pattern => {
+          result = result.split(pattern).join(target);
+        });
+      });
+
+      return result.replace(/\s+/g, " ").trim();
+    }
+
+    function fitDisplayText() {
+      const sourceLength = sourceText.textContent.length;
+      const translatedLength = translatedText.textContent.length;
+
+      sourceText.classList.remove("compact", "tiny");
+      translatedText.classList.remove("compact", "tiny");
+
+      if (sourceLength > 45) sourceText.classList.add("compact");
+      if (sourceLength > 90) sourceText.classList.add("tiny");
+
+      if (translatedLength > 55) translatedText.classList.add("compact");
+      if (translatedLength > 110) translatedText.classList.add("tiny");
+    }
+
     function setupSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -997,6 +1127,19 @@
 
       rec.onend = function() {
         recognizing = false;
+
+        if (desiredRunning) {
+          setStatus("音声入力を自動再開中...");
+          setTimeout(function() {
+            try {
+              rec.start();
+            } catch (err) {
+              setStatus("自動再開エラー：" + err.message);
+            }
+          }, 500);
+          return;
+        }
+
         startBtn.classList.remove("recording");
         startBtn.textContent = "🎙 リアルタイム開始";
         setStatus("停止中");
@@ -1023,6 +1166,7 @@
         if (interimText) {
           sourceText.textContent = correctJapaneseText(interimText);
           translatedText.textContent = "翻訳中...";
+          fitDisplayText();
         }
 
         if (finalText) {
@@ -1032,6 +1176,7 @@
 
           lastFinalText = finalText;
           sourceText.textContent = finalText;
+          fitDisplayText();
 
           const now = Date.now();
           if (now - lastTranslateAt > 500) {
@@ -1045,6 +1190,8 @@
     }
 
     function startMic() {
+      desiredRunning = true;
+
       if (!recognition) {
         recognition = setupSpeechRecognition();
       }
@@ -1059,8 +1206,14 @@
     }
 
     function stopMic() {
+      desiredRunning = false;
+
       if (recognition && recognizing) {
         recognition.stop();
+      } else {
+        startBtn.classList.remove("recording");
+        startBtn.textContent = "🎙 リアルタイム開始";
+        setStatus("停止中");
       }
     }
 
@@ -1072,7 +1225,11 @@
       }
 
       translatedText.textContent = "翻訳中...";
+      fitDisplayText();
       setStatus("翻訳中");
+
+      const protectedData = applyTermPlaceholders(text);
+      const textForTranslate = protectedData.text;
 
       const callbackName = "callback_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
 
@@ -1084,7 +1241,9 @@
             return;
           }
 
-          translatedText.textContent = data.translated || "翻訳結果なし";
+          const restored = restoreTermPlaceholders(data.translated || "", protectedData.replacements);
+          translatedText.textContent = restored || "翻訳結果なし";
+          fitDisplayText();
           setStatus("翻訳完了");
 
         } finally {
@@ -1108,7 +1267,7 @@
 
       script.src =
         GAS_URL +
-        "?text=" + encodeURIComponent(text) +
+        "?text=" + encodeURIComponent(textForTranslate) +
         "&target=" + encodeURIComponent(targetLang) +
         "&callback=" + callbackName +
         "&t=" + Date.now();
@@ -1117,20 +1276,26 @@
     }
 
     function toggleFullscreen() {
-      document.body.classList.toggle("fullscreenMode");
+      document.body.classList.add("fullscreenMode");
 
       const doc = document.documentElement;
 
-      if (!document.fullscreenElement) {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         if (doc.requestFullscreen) {
           doc.requestFullscreen().catch(() => {});
         } else if (doc.webkitRequestFullscreen) {
           doc.webkitRequestFullscreen();
         }
-      } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        }
+      }
+    }
+
+    function exitFullscreenMode() {
+      document.body.classList.remove("fullscreenMode");
+
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
       }
     }
 
