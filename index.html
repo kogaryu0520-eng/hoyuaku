@@ -1,447 +1,66 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>日→越 リアルタイム字幕</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --border: #2d333b;
-    --vi: #ffffff;
-    --ja: #8b949e;
-    --accent: #d29922;      /* 安全色に近い琥珀。工場の注意喚起色と揃える */
-    --live: #3fb950;
-    --danger: #f85149;
-    --font-size-vi: 64px;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    background: var(--bg);
-    color: var(--vi);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans", sans-serif;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+/**
+ * 日本語 → ベトナム語 翻訳API
+ * GASウェブアプリ
+ *
+ * 通常JSON / JSONP 両対応版
+ * HTMLをGitHub Pages等の別ドメインで開く場合はJSONP対応が安全です。
+ */
 
-  /* ── 上部コントロールバー ── */
-  #bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  #bar.hidden { display: none; }
-  button {
-    font-family: inherit;
-    font-size: 16px;
-    font-weight: 600;
-    padding: 12px 20px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: #21262d;
-    color: var(--vi);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #toggleBtn { min-width: 140px; }
-  #toggleBtn.running { background: var(--danger); border-color: var(--danger); }
-  #toggleBtn.stopped { background: var(--live); border-color: var(--live); color: #04260d; }
-  #status {
-    font-size: 13px;
-    color: var(--ja);
-    flex: 1;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .dot {
-    display: inline-block;
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--ja);
-    margin-right: 6px;
-    vertical-align: middle;
-  }
-  .dot.live { background: var(--live); animation: pulse 1.2s infinite; }
-  @keyframes pulse { 50% { opacity: 0.3; } }
+function doGet(e) {
+  return handleTranslate(e);
+}
 
-  /* ── 字幕表示エリア：最新翻訳を中央、履歴を下部 ── */
-  #stage {
-    flex: 1;
-    display: grid;
-    grid-template-rows: 1fr auto;
-    padding: 3vh 5vw 4vh;
-    overflow: hidden;
-    text-align: center;
-  }
+function doPost(e) {
+  return handleTranslate(e);
+}
 
-  /* 最新翻訳 */
-  #current {
-    align-self: center;
-    justify-self: center;
-    width: 100%;
-    max-width: 1200px;
-  }
-
-  #jaLive {
-    font-size: calc(var(--font-size-vi) * 0.34);
-    color: var(--ja);
-    line-height: 1.4;
-    min-height: 1.4em;
-    margin-bottom: 18px;
-    text-align: center;
-  }
-  #jaLive.off { display: none; }
-  #jaLive .interim { color: #6e7681; }
-
-  #viMain {
-    font-size: clamp(36px, var(--font-size-vi), 12vw);
-    font-weight: 700;
-    line-height: 1.25;
-    color: var(--vi);
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-    text-align: center;
-  }
-  #viMain .pending {
-    color: var(--accent);
-    font-size: 0.5em;
-    font-weight: 400;
-  }
-
-  /* 履歴は下部に小さく表示 */
-  #history {
-    align-self: end;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    gap: 10px;
-    max-height: 28vh;
-    margin-top: 24px;
-    opacity: 0.82;
-    mask-image: linear-gradient(to bottom, transparent, black 28%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 28%);
-  }
-  .pair .vi-old {
-    font-size: calc(var(--font-size-vi) * 0.36);
-    color: #c9d1d9;
-    line-height: 1.3;
-    font-weight: 600;
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-  .pair .ja-old {
-    font-size: calc(var(--font-size-vi) * 0.2);
-    color: var(--ja);
-    line-height: 1.35;
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-  .pair .ja-old.off { display: none; }
-
-  @media (max-width: 700px) {
-    :root { --font-size-vi: 48px; }
-    #stage { padding: 2vh 4vw 3vh; }
-    #history { max-height: 24vh; }
-  }
-
-  /* ── 設定パネル ── */
-  #settings {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.75);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-  }
-  #settings.open { display: flex; }
-  #settingsBox {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 24px;
-    width: min(560px, 92vw);
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-  #settingsBox h2 { font-size: 18px; }
-  .field label { display: block; font-size: 13px; color: var(--ja); margin-bottom: 6px; }
-  .field input[type="url"] {
-    width: 100%;
-    font-size: 15px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: #0d1117;
-    color: var(--vi);
-  }
-  .field input[type="range"] { width: 100%; }
-  .row { display: flex; align-items: center; gap: 10px; }
-  .row input[type="checkbox"] { width: 22px; height: 22px; }
-  .hint { font-size: 12px; color: var(--ja); line-height: 1.5; }
-</style>
-</head>
-<body>
-
-<div id="bar">
-  <button id="toggleBtn" class="stopped">▶ 開始</button>
-  <button id="clearBtn">クリア</button>
-  <button id="settingsBtn">⚙ 設定</button>
-  <button id="fsBtn">⛶ 全画面</button>
-  <div id="status"><span class="dot" id="dot"></span><span id="statusText">停止中</span></div>
-</div>
-
-<div id="stage">
-  <div id="history"></div>
-  <div id="current">
-    <div id="jaLive"></div>
-    <div id="viMain">Chạm「▶ 開始」để bắt đầu<br><span style="font-size:0.4em;color:#8b949e;font-weight:400">「▶ 開始」をタップしてください</span></div>
-  </div>
-</div>
-
-<div id="settings">
-  <div id="settingsBox">
-    <h2>設定</h2>
-    <div class="field">
-      <label>GAS翻訳APIのURL(/exec で終わるURL)</label>
-      <input type="url" id="gasUrl" placeholder="https://script.google.com/macros/s/xxxx/exec">
-      <div class="hint">未入力の場合は非公式のGoogle翻訳エンドポイントを使用します(検証用。連続使用はGAS推奨)。</div>
-    </div>
-    <div class="field">
-      <label>ベトナム語の文字サイズ: <span id="sizeVal">64</span>px</label>
-      <input type="range" id="fontSize" min="32" max="140" step="4" value="64">
-    </div>
-    <div class="row">
-      <input type="checkbox" id="showJa" checked>
-      <label for="showJa" style="margin:0">日本語原文も表示する</label>
-    </div>
-    <div class="row">
-      <input type="checkbox" id="hideBar">
-      <label for="hideBar" style="margin:0">上部バーを隠す(表示エリア三本指タップで再表示)</label>
-    </div>
-    <button id="closeSettings" style="background:var(--accent);border-color:var(--accent);color:#1c1400">閉じる</button>
-  </div>
-</div>
-
-<script>
-(function () {
-  'use strict';
-
-  // ── 状態 ──
-  var running = false;
-  var recognition = null;
-  var restartTimer = null;
-  var wakeLock = null;
-  var seq = 0;
-
-  // ── 設定(localStorageはtry/catchで安全に) ──
-  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function load(k, d)  { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
-
-  var $ = function (id) { return document.getElementById(id); };
-  var gasUrlInput = $('gasUrl'), fontSizeInput = $('fontSize'), showJaInput = $('showJa'), hideBarInput = $('hideBar');
-
-  gasUrlInput.value = load('gasUrl', '');
-  fontSizeInput.value = load('fontSize', '64');
-  showJaInput.checked = load('showJa', '1') === '1';
-  applySettings();
-
-  function applySettings() {
-    document.documentElement.style.setProperty('--font-size-vi', fontSizeInput.value + 'px');
-    $('sizeVal').textContent = fontSizeInput.value;
-    var off = !showJaInput.checked;
-    $('jaLive').classList.toggle('off', off);
-    document.querySelectorAll('.ja-old').forEach(function (el) { el.classList.toggle('off', off); });
-    $('bar').classList.toggle('hidden', hideBarInput.checked);
-    store('gasUrl', gasUrlInput.value.trim());
-    store('fontSize', fontSizeInput.value);
-    store('showJa', showJaInput.checked ? '1' : '0');
-  }
-
-  $('settingsBtn').onclick = function () { $('settings').classList.add('open'); };
-  $('closeSettings').onclick = function () { applySettings(); $('settings').classList.remove('open'); };
-  fontSizeInput.oninput = applySettings;
-  showJaInput.onchange = applySettings;
-  hideBarInput.onchange = applySettings;
-
-  // 三本指タップでバー再表示
-  $('stage').addEventListener('touchstart', function (e) {
-    if (e.touches.length >= 3) { hideBarInput.checked = false; applySettings(); }
-  });
-
-  $('fsBtn').onclick = function () {
-    var el = document.documentElement;
-    if (document.fullscreenElement) { document.exitFullscreen(); }
-    else if (el.requestFullscreen) { el.requestFullscreen(); }
-    else if (el.webkitRequestFullscreen) { el.webkitRequestFullscreen(); }
+function handleTranslate(e) {
+  var out = {
+    translated: "",
+    error: null
   };
 
-  $('clearBtn').onclick = function () {
-    $('history').innerHTML = '';
-    $('jaLive').textContent = '';
-    $('viMain').textContent = '';
-  };
+  try {
+    var text = "";
 
-  // ── 画面スリープ防止 ──
-  function acquireWakeLock() {
-    if ('wakeLock' in navigator) {
-      navigator.wakeLock.request('screen').then(function (wl) { wakeLock = wl; }).catch(function () {});
+    if (e && e.parameter && e.parameter.text) {
+      text = e.parameter.text;
     }
-  }
-  document.addEventListener('visibilitychange', function () {
-    if (running && document.visibilityState === 'visible') acquireWakeLock();
-  });
 
-  // ── 翻訳 ──
-  function translate(text) {
-    var gas = gasUrlInput.value.trim();
-    if (gas) {
-      return fetch(gas + '?text=' + encodeURIComponent(text))
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (j.error) throw new Error(j.error);
-          return j.translated;
-        });
+    if (!text && e && e.postData && e.postData.contents) {
+      try {
+        var body = JSON.parse(e.postData.contents);
+        text = body.text || "";
+      } catch (jsonErr) {
+        text = e.postData.contents || "";
+      }
     }
-    // フォールバック: 非公式エンドポイント(検証用)
-    var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=vi&dt=t&q=' + encodeURIComponent(text);
-    return fetch(url)
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        return j[0].map(function (seg) { return seg[0]; }).join('');
-      });
-  }
 
-  // ── 表示更新 ──
-  function pushHistory(ja, vi) {
-    var div = document.createElement('div');
-    div.className = 'pair';
-    var viEl = document.createElement('div');
-    viEl.className = 'vi-old';
-    viEl.textContent = vi;
-    var jaEl = document.createElement('div');
-    jaEl.className = 'ja-old' + (showJaInput.checked ? '' : ' off');
-    jaEl.textContent = ja;
-    div.appendChild(viEl);
-    div.appendChild(jaEl);
-    var h = $('history');
-    h.appendChild(div);
-    while (h.children.length > 6) h.removeChild(h.firstChild);
-  }
+    text = String(text || "").trim();
 
-  function onFinalSegment(ja) {
-    var id = ++seq;
-    $('viMain').innerHTML = '<span class="pending">Đang dịch… (翻訳中)</span>';
-    translate(ja).then(function (vi) {
-      if (id !== seq) return; // 古い結果は破棄
-      var prevVi = $('viMain').getAttribute('data-vi');
-      var prevJa = $('viMain').getAttribute('data-ja');
-      if (prevVi) pushHistory(prevJa, prevVi);
-      $('viMain').textContent = vi;
-      $('viMain').setAttribute('data-vi', vi);
-      $('viMain').setAttribute('data-ja', ja);
-    }).catch(function (err) {
-      if (id !== seq) return;
-      $('viMain').innerHTML = '<span class="pending">翻訳エラー: ' + String(err).slice(0, 80) + '</span>';
-    });
-  }
-
-  // ── 音声認識 ──
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  function setStatus(text, live) {
-    $('statusText').textContent = text;
-    $('dot').className = 'dot' + (live ? ' live' : '');
-  }
-
-  function buildRecognition() {
-    var r = new SR();
-    r.lang = 'ja-JP';
-    r.continuous = true;
-    r.interimResults = true;
-
-    r.onresult = function (e) {
-      var interim = '', finals = [];
-      for (var i = e.resultIndex; i < e.results.length; i++) {
-        var t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finals.push(t.trim());
-        else interim += t;
-      }
-      var jaLive = $('jaLive');
-      if (finals.length) {
-        var fin = finals.join('');
-        jaLive.textContent = fin;
-        if (fin) onFinalSegment(fin);
-      }
-      if (interim) {
-        jaLive.innerHTML = '<span class="interim"></span>';
-        jaLive.firstChild.textContent = interim;
-      }
-    };
-
-    r.onerror = function (e) {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        running = false;
-        setStatus('マイク権限がありません。Safariの設定で許可してください', false);
-        updateBtn();
-      } else {
-        setStatus('認識エラー: ' + e.error + '(自動再開します)', running);
-      }
-    };
-
-    // iOS Safariは無音で自動停止するため、稼働中は常に再起動する
-    r.onend = function () {
-      if (!running) { setStatus('停止中', false); return; }
-      clearTimeout(restartTimer);
-      restartTimer = setTimeout(function () {
-        try { recognition.start(); setStatus('認識中(自動再開)', true); } catch (err) {}
-      }, 250);
-    };
-
-    return r;
-  }
-
-  function updateBtn() {
-    var b = $('toggleBtn');
-    b.textContent = running ? '■ 停止' : '▶ 開始';
-    b.className = running ? 'running' : 'stopped';
-  }
-
-  $('toggleBtn').onclick = function () {
-    if (!SR) {
-      alert('このブラウザは音声認識に対応していません。iPadのSafariで開いてください。');
-      return;
-    }
-    if (running) {
-      running = false;
-      clearTimeout(restartTimer);
-      try { recognition.stop(); } catch (e) {}
-      if (wakeLock) { wakeLock.release().catch(function(){}); wakeLock = null; }
-      setStatus('停止中', false);
+    if (!text) {
+      out.error = "翻訳する文字がありません";
     } else {
-      running = true;
-      recognition = buildRecognition();
-      try { recognition.start(); } catch (e) {}
-      acquireWakeLock();
-      setStatus('認識中 — 日本語で話してください', true);
+      out.translated = LanguageApp.translate(text, "ja", "vi");
     }
-    updateBtn();
-  };
 
-  if (!SR) setStatus('音声認識非対応のブラウザです', false);
-})();
-</script>
-</body>
-</html>
+  } catch (err) {
+    out.error = String(err);
+  }
+
+  var json = JSON.stringify(out);
+
+  // JSONP対応: ?callback=関数名 がある場合は JavaScript として返す
+  var callback = e && e.parameter && e.parameter.callback;
+  if (callback) {
+    callback = String(callback).replace(/[^\w.$]/g, "");
+    return ContentService
+      .createTextOutput(callback + "(" + json + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
+  // 通常JSON
+  return ContentService
+    .createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
+}
