@@ -74,22 +74,23 @@
   .dot.live { background: var(--live); animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
 
-  /* ── 字幕表示エリア：最新翻訳を中央、履歴を下部 ── */
+  /* ── 字幕表示エリア：最新翻訳を画面上部、履歴を下部 ── */
   #stage {
     flex: 1;
     display: grid;
-    grid-template-rows: 1fr auto;
-    padding: 3vh 5vw 4vh;
+    grid-template-rows: auto 1fr;
+    padding: 4vh 5vw 4vh;
     overflow: hidden;
     text-align: center;
   }
 
   /* 最新翻訳 */
   #current {
-    align-self: center;
+    align-self: start;
     justify-self: center;
     width: 100%;
     max-width: 1200px;
+    padding-top: 2vh;
   }
 
   #jaLive {
@@ -126,7 +127,7 @@
     flex-direction: column;
     justify-content: flex-end;
     gap: 10px;
-    max-height: 28vh;
+    max-height: 32vh;
     margin-top: 24px;
     opacity: 0.82;
     mask-image: linear-gradient(to bottom, transparent, black 28%);
@@ -245,6 +246,10 @@
   var restartTimer = null;
   var wakeLock = null;
   var seq = 0;
+  var previewTimer = null;
+  var translateCache = {};
+  var lastPreviewText = "";
+  var lastFinalText = ""; 
 
   // ── 設定(localStorageはtry/catchで安全に) ──
   function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -292,6 +297,12 @@
     $('history').innerHTML = '';
     $('jaLive').textContent = '';
     $('viMain').textContent = '';
+    $('viMain').removeAttribute('data-vi');
+    $('viMain').removeAttribute('data-ja');
+    $('viMain').removeAttribute('data-preview');
+    lastPreviewText = '';
+    lastFinalText = '';
+    clearTimeout(previewTimer);
   };
 
   // ── 画面スリープ防止 ──
@@ -305,8 +316,29 @@
   });
 
   // ── 翻訳 ──
-  // GASはfetchだとCORS/リダイレクトで失敗することがあるため、GAS利用時はJSONPで呼び出す
+  // 速度対策:
+  // 1) 同じ文はキャッシュして即表示
+  // 2) 話している途中の文章も短い無音で先読み翻訳
+  // 3) 確定文は即時翻訳
+  function normalizeText(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
   function translate(text) {
+    text = normalizeText(text);
+    if (!text) return Promise.resolve("");
+
+    if (translateCache[text]) {
+      return Promise.resolve(translateCache[text]);
+    }
+
+    return rawTranslate(text).then(function (vi) {
+      translateCache[text] = vi;
+      return vi;
+    });
+  }
+
+  function rawTranslate(text) {
     var gas = gasUrlInput.value.trim();
 
     if (gas) {
@@ -388,17 +420,56 @@
     while (h.children.length > 6) h.removeChild(h.firstChild);
   }
 
+  function schedulePreviewTranslate(ja) {
+    ja = normalizeText(ja);
+    if (!ja || ja.length < 4) return;
+    if (ja === lastPreviewText || ja === lastFinalText) return;
+
+    clearTimeout(previewTimer);
+
+    // 途中の言葉は変わりやすいので、短い無音後に先読み翻訳
+    previewTimer = setTimeout(function () {
+      var id = ++seq;
+      lastPreviewText = ja;
+      $('viMain').innerHTML = '<span class="pending">Đang dịch nhanh…</span>';
+
+      translate(ja).then(function (vi) {
+        if (id !== seq) return;
+        $('viMain').textContent = vi;
+        $('viMain').setAttribute('data-preview', '1');
+      }).catch(function () {
+        // 途中翻訳の失敗は画面に出さない。確定翻訳で再挑戦する。
+      });
+    }, 450);
+  }
+
   function onFinalSegment(ja) {
+    ja = normalizeText(ja);
+    if (!ja) return;
+
+    clearTimeout(previewTimer);
+    lastFinalText = ja;
+
     var id = ++seq;
-    $('viMain').innerHTML = '<span class="pending">Đang dịch… (翻訳中)</span>';
+
+    // キャッシュ済みなら「翻訳中」を挟まず即表示
+    if (!translateCache[ja]) {
+      $('viMain').innerHTML = '<span class="pending">Đang dịch… (翻訳中)</span>';
+    }
+
     translate(ja).then(function (vi) {
       if (id !== seq) return; // 古い結果は破棄
+
       var prevVi = $('viMain').getAttribute('data-vi');
       var prevJa = $('viMain').getAttribute('data-ja');
-      if (prevVi) pushHistory(prevJa, prevVi);
+
+      // プレビュー表示は履歴に入れない。確定済みの前回文だけ履歴へ。
+      if (prevVi && prevJa && prevJa !== ja) pushHistory(prevJa, prevVi);
+
       $('viMain').textContent = vi;
       $('viMain').setAttribute('data-vi', vi);
       $('viMain').setAttribute('data-ja', ja);
+      $('viMain').removeAttribute('data-preview');
     }).catch(function (err) {
       if (id !== seq) return;
       $('viMain').innerHTML = '<span class="pending">翻訳エラー: ' + String(err).slice(0, 80) + '</span>';
@@ -435,6 +506,7 @@
       if (interim) {
         jaLive.innerHTML = '<span class="interim"></span>';
         jaLive.firstChild.textContent = interim;
+        schedulePreviewTranslate(interim);
       }
     };
 
