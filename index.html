@@ -233,9 +233,17 @@
     /*
       ここをGASのWebアプリURLに変更してください。
       例：
-      const GAS_URL = "https://script.google.com/macros/s/AKfycbxxxxxxx/exec";
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbwVnFVFrcm0opKSaKCoe-02wH1nisKb7eMAdbSklkcpw1XFADcd8rv7YMefE1mtwJ2C/exec";
     */
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwVnFVFrcm0opKSaKCoe-02wH1nisKb7eMAdbSklkcpw1XFADcd8rv7YMefE1mtwJ2C/exec";
+
+    window.onerror = function(message, source, lineno, colno, error) {
+      var status = document.getElementById("status");
+      if (status) {
+        status.textContent = "JSエラー：" + message + " / " + lineno;
+      }
+      return false;
+    };
 
     let targetLang = "vi";
     let recognition = null;
@@ -398,7 +406,8 @@
       let result = String(translated || "");
 
       replacements.forEach(item => {
-        const fixed = TERM_TRANSLATIONS[item.term]?.[targetLang] || item.term;
+        const termMap = TERM_TRANSLATIONS[item.term] || {};
+        const fixed = termMap[targetLang] || item.term;
         const raw = item.placeholder.trim();
 
         [
@@ -438,7 +447,14 @@
         return null;
       }
 
-      const rec = new SpeechRecognition();
+      let rec;
+      try {
+        rec = new SpeechRecognition();
+      } catch (e) {
+        setStatus("音声認識を開始できません：" + e.message);
+        return null;
+      }
+
       rec.lang = "ja-JP";
       rec.continuous = true;
       rec.interimResults = true;
@@ -512,6 +528,7 @@
     }
 
     function startMic() {
+      setStatus("開始ボタンが押されました");
       desiredRunning = true;
 
       if (!recognition) {
