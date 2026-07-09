@@ -2,565 +2,224 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>日→越 リアルタイム字幕</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多言語翻訳アプリ</title>
+
 <style>
-  :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --border: #2d333b;
-    --vi: #ffffff;
-    --ja: #8b949e;
-    --accent: #d29922;      /* 安全色に近い琥珀。工場の注意喚起色と揃える */
-    --live: #3fb950;
-    --danger: #f85149;
-    --font-size-vi: 64px;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    background: var(--bg);
-    color: var(--vi);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans", sans-serif;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 16px;
+  background: #f4f4f4;
+}
 
-  /* ── 上部コントロールバー ── */
-  #bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  #bar.hidden { display: none; }
-  button {
-    font-family: inherit;
-    font-size: 16px;
-    font-weight: 600;
-    padding: 12px 20px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: #21262d;
-    color: var(--vi);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #toggleBtn { min-width: 140px; }
-  #toggleBtn.running { background: var(--danger); border-color: var(--danger); }
-  #toggleBtn.stopped { background: var(--live); border-color: var(--live); color: #04260d; }
-  #status {
-    font-size: 13px;
-    color: var(--ja);
-    flex: 1;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .dot {
-    display: inline-block;
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--ja);
-    margin-right: 6px;
-    vertical-align: middle;
-  }
-  .dot.live { background: var(--live); animation: pulse 1.2s infinite; }
-  @keyframes pulse { 50% { opacity: 0.3; } }
+.app {
+  max-width: 720px;
+  margin: auto;
+}
 
-  /* ── 字幕表示エリア：最新翻訳を画面上部、履歴を下部 ── */
-  #stage {
-    flex: 1;
-    display: grid;
-    grid-template-rows: auto 1fr;
-    padding: 4vh 5vw 4vh;
-    overflow: hidden;
-    text-align: center;
-  }
+.result {
+  background: #111;
+  color: #fff;
+  padding: 18px;
+  border-radius: 14px;
+  font-size: 26px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  min-height: 80px;
+  white-space: pre-wrap;
+}
 
-  /* 最新翻訳 */
-  #current {
-    align-self: start;
-    justify-self: center;
-    width: 100%;
-    max-width: 1200px;
-    padding-top: 2vh;
-  }
+textarea {
+  width: 100%;
+  height: 150px;
+  font-size: 20px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+}
 
-  #jaLive {
-    font-size: calc(var(--font-size-vi) * 0.34);
-    color: var(--ja);
-    line-height: 1.4;
-    min-height: 1.4em;
-    margin-bottom: 18px;
-    text-align: center;
-  }
-  #jaLive.off { display: none; }
-  #jaLive .interim { color: #6e7681; }
+select, button {
+  width: 100%;
+  font-size: 20px;
+  padding: 14px;
+  margin-top: 10px;
+  border-radius: 12px;
+  border: none;
+}
 
-  #viMain {
-    font-size: clamp(36px, var(--font-size-vi), 12vw);
-    font-weight: 700;
-    line-height: 1.25;
-    color: var(--vi);
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-    text-align: center;
-  }
-  #viMain .pending {
-    color: var(--accent);
-    font-size: 0.5em;
-    font-weight: 400;
-  }
+button {
+  background: #111;
+  color: white;
+}
 
-  /* 履歴は下部に小さく表示 */
-  #history {
-    align-self: end;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    gap: 10px;
-    max-height: 32vh;
-    margin-top: 24px;
-    opacity: 0.82;
-    mask-image: linear-gradient(to bottom, transparent, black 28%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 28%);
-  }
-  .pair .vi-old {
-    font-size: calc(var(--font-size-vi) * 0.36);
-    color: #c9d1d9;
-    line-height: 1.3;
-    font-weight: 600;
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-  .pair .ja-old {
-    font-size: calc(var(--font-size-vi) * 0.2);
-    color: var(--ja);
-    line-height: 1.35;
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-  .pair .ja-old.off { display: none; }
+.mic {
+  background: #0b7;
+}
 
-  @media (max-width: 700px) {
-    :root { --font-size-vi: 48px; }
-    #stage { padding: 2vh 4vw 3vh; }
-    #history { max-height: 24vh; }
-  }
+.clear {
+  background: #777;
+}
 
-  /* ── 設定パネル ── */
-  #settings {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.75);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-  }
-  #settings.open { display: flex; }
-  #settingsBox {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 24px;
-    width: min(560px, 92vw);
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-  #settingsBox h2 { font-size: 18px; }
-  .field label { display: block; font-size: 13px; color: var(--ja); margin-bottom: 6px; }
-  .field input[type="url"] {
-    width: 100%;
-    font-size: 15px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: #0d1117;
-    color: var(--vi);
-  }
-  .field input[type="range"] { width: 100%; }
-  .row { display: flex; align-items: center; gap: 10px; }
-  .row input[type="checkbox"] { width: 22px; height: 22px; }
-  .hint { font-size: 12px; color: var(--ja); line-height: 1.5; }
+.small {
+  font-size: 14px;
+  color: #666;
+  margin-top: 8px;
+}
 </style>
 </head>
+
 <body>
+<div class="app">
 
-<div id="bar">
-  <button id="toggleBtn" class="stopped">▶ 開始</button>
-  <button id="clearBtn">クリア</button>
-  <button id="settingsBtn">⚙ 設定</button>
-  <button id="fsBtn">⛶ 全画面</button>
-  <div id="status"><span class="dot" id="dot"></span><span id="statusText">停止中</span></div>
-</div>
+  <div id="result" class="result">翻訳結果がここに表示されます</div>
 
-<div id="stage">
-  <div id="history"></div>
-  <div id="current">
-    <div id="jaLive"></div>
-    <div id="viMain">Chạm「▶ 開始」để bắt đầu<br><span style="font-size:0.4em;color:#8b949e;font-weight:400">「▶ 開始」をタップしてください</span></div>
+  <select id="targetLang">
+    <option value="vi">🇻🇳 ベトナム語</option>
+    <option value="en">🇺🇸 英語</option>
+    <option value="es">🇪🇸 スペイン語</option>
+    <option value="pt">🇧🇷 ポルトガル語</option>
+    <option value="zh-CN">🇨🇳 中国語</option>
+    <option value="id">🇮🇩 インドネシア語</option>
+  </select>
+
+  <textarea id="inputText" placeholder="日本語を入力、または音声入力してください"></textarea>
+
+  <button class="mic" onclick="startVoice()">🎤 日本語音声入力</button>
+  <button onclick="translateText()">翻訳する</button>
+  <button onclick="speakResult()">🔊 読み上げ</button>
+  <button class="clear" onclick="clearText()">クリア</button>
+
+  <div class="small">
+    音声入力は短く区切ると精度が上がります。例：朝礼を始めます。夕礼で報告してください。
   </div>
-</div>
 
-<div id="settings">
-  <div id="settingsBox">
-    <h2>設定</h2>
-    <div class="field">
-      <label>GAS翻訳APIのURL(/exec で終わるURL)</label>
-      <input type="url" id="gasUrl" placeholder="https://script.google.com/macros/s/xxxx/exec">
-      <div class="hint">未入力の場合は非公式のGoogle翻訳エンドポイントを使用します(検証用。連続使用はGAS推奨)。</div>
-    </div>
-    <div class="field">
-      <label>ベトナム語の文字サイズ: <span id="sizeVal">64</span>px</label>
-      <input type="range" id="fontSize" min="32" max="140" step="4" value="64">
-    </div>
-    <div class="row">
-      <input type="checkbox" id="showJa" checked>
-      <label for="showJa" style="margin:0">日本語原文も表示する</label>
-    </div>
-    <div class="row">
-      <input type="checkbox" id="hideBar">
-      <label for="hideBar" style="margin:0">上部バーを隠す(表示エリア三本指タップで再表示)</label>
-    </div>
-    <button id="closeSettings" style="background:var(--accent);border-color:var(--accent);color:#1c1400">閉じる</button>
-  </div>
 </div>
 
 <script>
-(function () {
-  'use strict';
+const GAS_URL = "ここにGASのWebアプリURLを入れてください";
 
-  // ── 状態 ──
-  var running = false;
-  var recognition = null;
-  var restartTimer = null;
-  var wakeLock = null;
-  var seq = 0;
-  var previewTimer = null;
-  var translateCache = {};
-  var lastPreviewText = "";
-  var lastFinalText = ""; 
+const langVoiceMap = {
+  vi: "vi-VN",
+  en: "en-US",
+  es: "es-ES",
+  pt: "pt-BR",
+  "zh-CN": "zh-CN",
+  id: "id-ID"
+};
 
-  // ── 設定(localStorageはtry/catchで安全に) ──
-  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function load(k, d)  { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+let recognition;
 
-  var $ = function (id) { return document.getElementById(id); };
-  var gasUrlInput = $('gasUrl'), fontSizeInput = $('fontSize'), showJaInput = $('showJa'), hideBarInput = $('hideBar');
+function normalizeJapanese(text) {
+  return text
+    .replace(/文字お越し/g, "文字起こし")
+    .replace(/幽霊/g, "夕礼")
+    .replace(/条例/g, "朝礼")
+    .replace(/近ずかない/g, "近づかない")
+    .replace(/ヘルメットを着用して下さい/g, "ヘルメットを着用してください")
+    .replace(/クレーンが動きます/g, "クレーンが動きます")
+    .replace(/図面/g, "図面")
+    .replace(/溶接/g, "溶接")
+    .replace(/ショット/g, "ショット")
+    .replace(/ピッキング/g, "ピッキング")
+    .trim();
+}
 
-  gasUrlInput.value = load('gasUrl', '');
-  fontSizeInput.value = load('fontSize', '64');
-  showJaInput.checked = load('showJa', '1') === '1';
-  applySettings();
+function startVoice() {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  function applySettings() {
-    document.documentElement.style.setProperty('--font-size-vi', fontSizeInput.value + 'px');
-    $('sizeVal').textContent = fontSizeInput.value;
-    var off = !showJaInput.checked;
-    $('jaLive').classList.toggle('off', off);
-    document.querySelectorAll('.ja-old').forEach(function (el) { el.classList.toggle('off', off); });
-    $('bar').classList.toggle('hidden', hideBarInput.checked);
-    store('gasUrl', gasUrlInput.value.trim());
-    store('fontSize', fontSizeInput.value);
-    store('showJa', showJaInput.checked ? '1' : '0');
+  if (!SpeechRecognition) {
+    alert("このブラウザは音声入力に対応していません。Chromeで開いてください。");
+    return;
   }
 
-  $('settingsBtn').onclick = function () { $('settings').classList.add('open'); };
-  $('closeSettings').onclick = function () { applySettings(); $('settings').classList.remove('open'); };
-  fontSizeInput.oninput = applySettings;
-  showJaInput.onchange = applySettings;
-  hideBarInput.onchange = applySettings;
+  recognition = new SpeechRecognition();
+  recognition.lang = "ja-JP";
+  recognition.continuous = true;
+  recognition.interimResults = true;
 
-  // 三本指タップでバー再表示
-  $('stage').addEventListener('touchstart', function (e) {
-    if (e.touches.length >= 3) { hideBarInput.checked = false; applySettings(); }
-  });
+  let finalText = "";
 
-  $('fsBtn').onclick = function () {
-    var el = document.documentElement;
-    if (document.fullscreenElement) { document.exitFullscreen(); }
-    else if (el.requestFullscreen) { el.requestFullscreen(); }
-    else if (el.webkitRequestFullscreen) { el.webkitRequestFullscreen(); }
-  };
+  recognition.onresult = function(event) {
+    let interimText = "";
 
-  $('clearBtn').onclick = function () {
-    $('history').innerHTML = '';
-    $('jaLive').textContent = '';
-    $('viMain').textContent = '';
-    $('viMain').removeAttribute('data-vi');
-    $('viMain').removeAttribute('data-ja');
-    $('viMain').removeAttribute('data-preview');
-    lastPreviewText = '';
-    lastFinalText = '';
-    clearTimeout(previewTimer);
-  };
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
 
-  // ── 画面スリープ防止 ──
-  function acquireWakeLock() {
-    if ('wakeLock' in navigator) {
-      navigator.wakeLock.request('screen').then(function (wl) { wakeLock = wl; }).catch(function () {});
-    }
-  }
-  document.addEventListener('visibilitychange', function () {
-    if (running && document.visibilityState === 'visible') acquireWakeLock();
-  });
-
-  // ── 翻訳 ──
-  // 速度対策:
-  // 1) 同じ文はキャッシュして即表示
-  // 2) 話している途中の文章も短い無音で先読み翻訳
-  // 3) 確定文は即時翻訳
-  function normalizeText(text) {
-    return String(text || "").replace(/\s+/g, " ").trim();
-  }
-
-  function translate(text) {
-    text = normalizeText(text);
-    if (!text) return Promise.resolve("");
-
-    if (translateCache[text]) {
-      return Promise.resolve(translateCache[text]);
-    }
-
-    return rawTranslate(text).then(function (vi) {
-      translateCache[text] = vi;
-      return vi;
-    });
-  }
-
-  function rawTranslate(text) {
-    var gas = gasUrlInput.value.trim();
-
-    if (gas) {
-      return translateByJsonp(gas, text);
-    }
-
-    // フォールバック: 非公式エンドポイント(検証用)
-    var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=vi&dt=t&q=' + encodeURIComponent(text);
-    return fetch(url)
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function (j) {
-        if (!j || !j[0]) throw new Error('翻訳結果を取得できませんでした');
-        return j[0].map(function (seg) { return seg[0]; }).join('');
-      });
-  }
-
-  function translateByJsonp(gasUrl, text) {
-    return new Promise(function (resolve, reject) {
-      var callbackName = 'gasTranslateCallback_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-      var script = document.createElement('script');
-      var timer = null;
-
-      window[callbackName] = function (data) {
-        cleanup();
-        if (!data) {
-          reject(new Error('GASから結果が返りませんでした'));
-          return;
-        }
-        if (data.error) {
-          reject(new Error(data.error));
-          return;
-        }
-        resolve(data.translated || '');
-      };
-
-      function cleanup() {
-        clearTimeout(timer);
-        if (script.parentNode) script.parentNode.removeChild(script);
-        try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
-      }
-
-      timer = setTimeout(function () {
-        cleanup();
-        reject(new Error('GAS応答タイムアウト。デプロイ設定とURLを確認してください'));
-      }, 15000);
-
-      script.onerror = function () {
-        cleanup();
-        reject(new Error('GASに接続できません。URLまたは公開設定を確認してください'));
-      };
-
-      var sep = gasUrl.indexOf('?') === -1 ? '?' : '&';
-      script.src = gasUrl + sep +
-        'text=' + encodeURIComponent(text) +
-        '&callback=' + encodeURIComponent(callbackName) +
-        '&_=' + Date.now();
-
-      document.body.appendChild(script);
-    });
-  }
-
-  // ── 表示更新 ──
-  function pushHistory(ja, vi) {
-    var div = document.createElement('div');
-    div.className = 'pair';
-    var viEl = document.createElement('div');
-    viEl.className = 'vi-old';
-    viEl.textContent = vi;
-    var jaEl = document.createElement('div');
-    jaEl.className = 'ja-old' + (showJaInput.checked ? '' : ' off');
-    jaEl.textContent = ja;
-    div.appendChild(viEl);
-    div.appendChild(jaEl);
-    var h = $('history');
-    h.appendChild(div);
-    while (h.children.length > 6) h.removeChild(h.firstChild);
-  }
-
-  function schedulePreviewTranslate(ja) {
-    ja = normalizeText(ja);
-    if (!ja || ja.length < 4) return;
-    if (ja === lastPreviewText || ja === lastFinalText) return;
-
-    clearTimeout(previewTimer);
-
-    // 途中の言葉は変わりやすいので、短い無音後に先読み翻訳
-    previewTimer = setTimeout(function () {
-      var id = ++seq;
-      lastPreviewText = ja;
-      $('viMain').innerHTML = '<span class="pending">Đang dịch nhanh…</span>';
-
-      translate(ja).then(function (vi) {
-        if (id !== seq) return;
-        $('viMain').textContent = vi;
-        $('viMain').setAttribute('data-preview', '1');
-      }).catch(function () {
-        // 途中翻訳の失敗は画面に出さない。確定翻訳で再挑戦する。
-      });
-    }, 450);
-  }
-
-  function onFinalSegment(ja) {
-    ja = normalizeText(ja);
-    if (!ja) return;
-
-    clearTimeout(previewTimer);
-    lastFinalText = ja;
-
-    var id = ++seq;
-
-    // キャッシュ済みなら「翻訳中」を挟まず即表示
-    if (!translateCache[ja]) {
-      $('viMain').innerHTML = '<span class="pending">Đang dịch… (翻訳中)</span>';
-    }
-
-    translate(ja).then(function (vi) {
-      if (id !== seq) return; // 古い結果は破棄
-
-      var prevVi = $('viMain').getAttribute('data-vi');
-      var prevJa = $('viMain').getAttribute('data-ja');
-
-      // プレビュー表示は履歴に入れない。確定済みの前回文だけ履歴へ。
-      if (prevVi && prevJa && prevJa !== ja) pushHistory(prevJa, prevVi);
-
-      $('viMain').textContent = vi;
-      $('viMain').setAttribute('data-vi', vi);
-      $('viMain').setAttribute('data-ja', ja);
-      $('viMain').removeAttribute('data-preview');
-    }).catch(function (err) {
-      if (id !== seq) return;
-      $('viMain').innerHTML = '<span class="pending">翻訳エラー: ' + String(err).slice(0, 80) + '</span>';
-    });
-  }
-
-  // ── 音声認識 ──
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  function setStatus(text, live) {
-    $('statusText').textContent = text;
-    $('dot').className = 'dot' + (live ? ' live' : '');
-  }
-
-  function buildRecognition() {
-    var r = new SR();
-    r.lang = 'ja-JP';
-    r.continuous = true;
-    r.interimResults = true;
-
-    r.onresult = function (e) {
-      var interim = '', finals = [];
-      for (var i = e.resultIndex; i < e.results.length; i++) {
-        var t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finals.push(t.trim());
-        else interim += t;
-      }
-      var jaLive = $('jaLive');
-      if (finals.length) {
-        var fin = finals.join('');
-        jaLive.textContent = fin;
-        if (fin) onFinalSegment(fin);
-      }
-      if (interim) {
-        jaLive.innerHTML = '<span class="interim"></span>';
-        jaLive.firstChild.textContent = interim;
-        schedulePreviewTranslate(interim);
-      }
-    };
-
-    r.onerror = function (e) {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        running = false;
-        setStatus('マイク権限がありません。Safariの設定で許可してください', false);
-        updateBtn();
+      if (event.results[i].isFinal) {
+        finalText += transcript + "。";
       } else {
-        setStatus('認識エラー: ' + e.error + '(自動再開します)', running);
+        interimText += transcript;
       }
-    };
-
-    // iOS Safariは無音で自動停止するため、稼働中は常に再起動する
-    r.onend = function () {
-      if (!running) { setStatus('停止中', false); return; }
-      clearTimeout(restartTimer);
-      restartTimer = setTimeout(function () {
-        try { recognition.start(); setStatus('認識中(自動再開)', true); } catch (err) {}
-      }, 250);
-    };
-
-    return r;
-  }
-
-  function updateBtn() {
-    var b = $('toggleBtn');
-    b.textContent = running ? '■ 停止' : '▶ 開始';
-    b.className = running ? 'running' : 'stopped';
-  }
-
-  $('toggleBtn').onclick = function () {
-    if (!SR) {
-      alert('このブラウザは音声認識に対応していません。iPadのSafariで開いてください。');
-      return;
     }
-    if (running) {
-      running = false;
-      clearTimeout(restartTimer);
-      try { recognition.stop(); } catch (e) {}
-      if (wakeLock) { wakeLock.release().catch(function(){}); wakeLock = null; }
-      setStatus('停止中', false);
-    } else {
-      running = true;
-      recognition = buildRecognition();
-      try { recognition.start(); } catch (e) {}
-      acquireWakeLock();
-      setStatus('認識中 — 日本語で話してください', true);
-    }
-    updateBtn();
+
+    document.getElementById("inputText").value =
+      normalizeJapanese(finalText + interimText);
   };
 
-  if (!SR) setStatus('音声認識非対応のブラウザです', false);
-})();
+  recognition.onerror = function(event) {
+    alert("音声認識エラー: " + event.error);
+  };
+
+  recognition.start();
+}
+
+function translateText() {
+  const text = normalizeJapanese(document.getElementById("inputText").value);
+  const target = document.getElementById("targetLang").value;
+  const result = document.getElementById("result");
+
+  if (!text) {
+    alert("日本語を入力してください");
+    return;
+  }
+
+  result.textContent = "翻訳中...";
+
+  const callbackName = "callback_" + Date.now();
+
+  window[callbackName] = function(data) {
+    if (data.error) {
+      result.textContent = "エラー: " + data.error;
+    } else {
+      result.textContent = data.translated;
+    }
+
+    delete window[callbackName];
+    document.body.removeChild(script);
+  };
+
+  const script = document.createElement("script");
+  script.src =
+    GAS_URL +
+    "?text=" + encodeURIComponent(text) +
+    "&target=" + encodeURIComponent(target) +
+    "&callback=" + callbackName;
+
+  document.body.appendChild(script);
+}
+
+function speakResult() {
+  const text = document.getElementById("result").textContent;
+  const target = document.getElementById("targetLang").value;
+
+  if (!text || text === "翻訳結果がここに表示されます") return;
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = langVoiceMap[target] || "en-US";
+  utter.rate = 0.9;
+
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utter);
+}
+
+function clearText() {
+  document.getElementById("inputText").value = "";
+  document.getElementById("result").textContent = "翻訳結果がここに表示されます";
+}
 </script>
+
 </body>
 </html>
